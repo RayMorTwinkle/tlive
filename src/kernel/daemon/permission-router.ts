@@ -94,6 +94,15 @@ export interface PermissionRouterDeps {
    *  先得,所以主会话 hold 住不会失去终端。又:自 CC 2.1.198 起子代理默认后台
    *  运行(`status: "async_launched"`),所以这条几乎覆盖所有子代理。 */
   holdSubagents?: () => boolean;
+  /** Whether a headless session's request (`claude -p`, an Agent SDK host) is
+   *  held for a remote answer. Default (absent/false) = pass-through: defer →
+   *  shim `{}` → Claude Code's own outcome, which is a denial under -p or the
+   *  SDK host's own permission callback. Such a session has no terminal dialog
+   *  at all, so holding it makes tlive the ONLY way out and the run stalls
+   *  until somebody answers or the window ends. Same trade as sub-agents, so
+   *  the same rung opts in (`mode: all`). Claude Code fires PermissionRequest
+   *  under -p only since 2.1.268; before that this case did not exist. */
+  holdHeadless?: () => boolean;
   /** 超时动作(opt-in)。默认(缺省/`'defer'`)= 超时落回 `{}`(CC 原生:本地框
    *  继续等 / 无头 auto-deny),绝不自动决定。`'deny'` = 超时即拒(带"timed out"
    *  说明),让 turn 得以结束 → 续跑卡可重定向。deny 是安全方向,不破 never-auto-
@@ -147,7 +156,7 @@ export class PermissionRouter {
    *  Keeping them as two required, separate fields is the whole point of this
    *  split — collapsing them back into one is the bug (see bootstrap.ts's
    *  resolveKey doc comment). */
-  async requestPermission(opts: { key: string; cwd: string; toolName: string; input: unknown; permissionMode?: string; timeoutSec?: number; sessionId?: string; agentId?: string; onAbandoned?: (cb: () => void) => void }): Promise<{ decision: Decision; message?: string; updatedInput?: unknown }> {
+  async requestPermission(opts: { key: string; cwd: string; toolName: string; input: unknown; permissionMode?: string; timeoutSec?: number; sessionId?: string; agentId?: string; headless?: boolean; onAbandoned?: (cb: () => void) => void }): Promise<{ decision: Decision; message?: string; updatedInput?: unknown }> {
     // Identity only — the tool input can carry secrets and never goes to the log.
     const who = {
       key: opts.key,
@@ -180,6 +189,14 @@ export class PermissionRouter {
         const { title, body } = this.deps.renderCard({ toolName: opts.toolName, input: opts.input });
         this.deps.onPassthrough({ key: opts.key, cwd: opts.cwd, agentId: opts.agentId, toolName: opts.toolName, title, body, input: opts.input });
       }
+      return { decision: 'defer' };
+    }
+
+    // Headless pass-through (see holdHeadless). No notice, unlike a sub-agent:
+    // the defer IS the outcome — Claude Code denies, or the SDK host decides —
+    // and there is no dialog anywhere for a notice to point at.
+    if (opts.headless && !(this.deps.holdHeadless?.() ?? false)) {
+      outcome('headless-passthrough');
       return { decision: 'defer' };
     }
 

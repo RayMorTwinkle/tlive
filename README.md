@@ -134,6 +134,11 @@ continue" line makes the distinction moot for what you actually do.
     held sub-agent has **no** terminal box until the window ends — remote
     becomes the only answer path. Worth it only when nobody is at the
     keyboard; `tlive mode full` goes back.
+  - **Headless runs pass through too** — `claude -p` and Agent SDK hosts
+    have no terminal dialog at all, so on `full` tlive leaves them to Claude
+    Code: a denial under `-p`, or the SDK host's own permission callback.
+    `tlive mode all` holds them, and a held run waits for your answer or the
+    window.
 - **Answer `AskUserQuestion` from IM or the dashboard (Claude Code only)** —
   CC fires a `PermissionRequest` for its own question tool; tlive relays it as
   a single-select or multi-select card (checkboxes, a live `Submit (N)` count,

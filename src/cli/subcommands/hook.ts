@@ -55,6 +55,15 @@ export function agentPidFromEnv(env: NodeJS.ProcessEnv): number | undefined {
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
+/** A session with no terminal dialog at all: `claude -p` (`sdk-cli`) or an
+ *  Agent SDK host (`sdk-ts`, `sdk-py`), whose prompts belong to the host
+ *  program or to nobody. Claude Code puts the entrypoint in its hooks'
+ *  environment; the hook payload carries nothing equivalent. Absent — Codex,
+ *  or an interactive session (`cli`) — is not headless. */
+export function headlessFromEnv(env: NodeJS.ProcessEnv): boolean {
+  return env.CLAUDE_CODE_ENTRYPOINT?.startsWith('sdk-') ?? false;
+}
+
 async function readStdin(): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c as Buffer);
@@ -197,6 +206,7 @@ export async function runHook(argv: string[]): Promise<void> {
           permissionMode: a.permissionMode,
           timeoutSec: win.timeoutSec,
           ...(a.agentId ? { agentId: a.agentId } : {}),
+          ...(headlessFromEnv(process.env) ? { headless: true } : {}),
           ...(wrappedId ? { wrappedId } : {}),
         },
         { timeoutMs: win.ipcMs },

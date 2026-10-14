@@ -572,6 +572,43 @@ describe('sub-agent pass-through (tlive stays transparent for sub-agents by defa
   });
 });
 
+describe('headless pass-through (`claude -p` / Agent SDK sessions)', () => {
+  // A headless session has no terminal dialog at all — its prompts belong to
+  // the host program, or to nobody. Holding one makes tlive the only way out:
+  // unanswered, the run stalls until the window ends. So the default stays
+  // native (defer → CC denies, or the SDK host's own permission callback runs),
+  // and only the top posture rung holds it — the same trade as sub-agents.
+  it('defers by default — no card, no onPending, and no pass-through notice (nothing is waiting anywhere)', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const pend: unknown[] = [];
+    const notices: unknown[] = [];
+    const r = new PermissionRouter(base({ sendToChat: send, hasLocalAnswerPath: () => true, onPending: (p: unknown) => pend.push(p), onPassthrough: (p: unknown) => notices.push(p) }));
+    const res = await r.requestPermission({ key: '/w', cwd: '/w', toolName: 'Bash', input: {}, headless: true, timeoutSec: 0.1 });
+    expect(res.decision).toBe('defer');
+    expect(send).not.toHaveBeenCalled();
+    expect(pend).toEqual([]);
+    expect(notices).toEqual([]);
+  });
+
+  it('with holdHeadless opt-in, a headless request holds and is remotely answerable', async () => {
+    let id = '';
+    const r = new PermissionRouter(base({ holdHeadless: () => true, sendToChat: async (_t: unknown, c: { requestId: string }) => { id = c.requestId; } }));
+    const p = r.requestPermission({ key: '/w', cwd: '/w', toolName: 'Bash', input: {}, headless: true, timeoutSec: 60 });
+    await new Promise((res) => setTimeout(res, 10));
+    expect(id).not.toBe('');
+    r.answer(id, true);
+    expect((await p).decision).toBe('allow');
+  });
+
+  it('a policy-allowed tool still auto-allows, as it does for sub-agents', async () => {
+    const send = vi.fn();
+    const r = new PermissionRouter(base({ policyDecide: () => ({ decision: 'allow', reason: 'read-only' }), sendToChat: send }));
+    const res = await r.requestPermission({ key: '/w', cwd: '/w', toolName: 'Read', input: {}, headless: true });
+    expect(res.decision).toBe('allow');
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
 describe('hasPendingFor — the daemon dedupe test for Notification(permission_prompt) (issue #49)', () => {
   it('true while a request for the key is held, false after it resolves', async () => {
     let id = '';

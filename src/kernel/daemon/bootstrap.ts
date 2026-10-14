@@ -694,6 +694,8 @@ export async function bootstrapDaemon(opts: BootstrapOpts): Promise<DaemonHandle
     // block); the 'all' rung opts into holding + remotely answering them, at the
     // cost of their terminal dialog. See permission-router's holdSubagents doc.
     holdSubagents: () => currentMode() === 'all',
+    // Same rung, same reason: a headless run has no terminal dialog either.
+    holdHeadless: () => currentMode() === 'all',
     // Opt-in: on a held approval's timeout, deny (→ turn ends → continue card can
     // redirect) instead of the default defer (→ CC-native local fallback).
     timeoutAction: () => cfg.approvals?.timeoutAction ?? 'defer',
@@ -1341,6 +1343,7 @@ export async function bootstrapDaemon(opts: BootstrapOpts): Promise<DaemonHandle
             timeoutSec: clampPermissionTimeout(req.timeoutSec),
             ...(req.sessionId ? { sessionId: req.sessionId } : {}),
             ...(req.agentId ? { agentId: req.agentId } : {}),
+            ...(req.headless ? { headless: true } : {}),
             ...(ctx.onDisconnect ? { onAbandoned: ctx.onDisconnect } : {}),
           });
           // 'gone' = the shim already died — the socket is gone, there is

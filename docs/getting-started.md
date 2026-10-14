@@ -144,6 +144,10 @@ call:
    held sub-agent has **no** terminal prompt until the window ends (a timeout,
    or the phone/dashboard answer). Use it when nobody is at the keyboard;
    `tlive mode full` goes back to passing sub-agent prompts straight through.
+2. Headless runs — `claude -p`, or a program built on the Agent SDK — are held
+   too. They have no terminal dialog at all, so on `full` tlive leaves them to
+   Claude Code (a denial under `-p`, or the SDK host's own permission
+   callback), and on `all` a held run waits for your answer or the window.
 
 Nothing is ever auto-approved or blanket-denied: if the daemon is unreachable,
 the window expires, or no chat is configured, the hook falls back to `{}` and

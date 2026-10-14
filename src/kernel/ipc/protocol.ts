@@ -28,7 +28,10 @@ export type IpcRequest =
   // agentId: sub-agent identity (both vendors emit agent_id) — lets the daemon
   // cancel THIS agent's pending card on its local answer without touching
   // sibling agents that share the same key+tool.
-  | { kind: 'hook.permission.request'; cwd: string; sessionId: string; toolName: string; input: unknown; permissionMode?: string; wrappedId?: string; timeoutSec?: number; agentId?: string }
+  | { kind: 'hook.permission.request'; cwd: string; sessionId: string; toolName: string; input: unknown; permissionMode?: string; wrappedId?: string; timeoutSec?: number; agentId?: string;
+      // headless: `claude -p` or an Agent SDK host — no terminal dialog exists.
+      // Additive: a daemon that predates it simply holds, as it always did.
+      headless?: boolean }
   | { kind: 'hook.permission.answer'; requestId: string; approved: boolean; message?: string }
   | { kind: 'hook.continue.request'; cwd: string; sessionId: string; context: string; lastMessage?: string; wrappedId?: string }
   // agentPid: the agent process that ran this hook (CLAUDE_PID). Recorded on

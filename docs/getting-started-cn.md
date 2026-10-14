@@ -126,6 +126,10 @@ tlive run claude
    所以一个被 hold 的子代理在窗口结束前（超时,或手机/dashboard 作答落地）
    **没有**终端提示。只在没人在键盘前时用它;`tlive mode full` 改回让子代理
    提示直接透传。
+2. 无头运行——`claude -p`,或基于 Agent SDK 的程序——也会被 hold。它们根本
+   没有终端框,所以在 `full` 下 tlive 交给 Claude Code 原生处理(`-p` 下直接
+   拒绝,SDK 程序走它自己的权限回调);在 `all` 下被 hold 的运行会等你作答
+   或等到窗口结束。
 
 绝不自动放行、也绝不全拒:守护进程不可达、窗口超时、或没配 chat 时,hook
 回落 `{}`,控制权退回本地终端,就像 tlive 不存在。
