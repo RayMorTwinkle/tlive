@@ -42,6 +42,16 @@ describe('companion', () => {
     comp.stop();
   });
 
+  it('subscribes without asking for the history it never reads', async () => {
+    const { calls, comp } = harness();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    await Promise.resolve();
+    const resume = calls.find((c) => c.method === 'thread/resume' && c.params.threadId === 't1');
+    expect(resume?.params.excludeTurns).toBe(true);
+    comp.stop();
+  });
+
   it('resume retries on no-rollout then succeeds', async () => {
     const calls: any[] = [];
     let events: any;
