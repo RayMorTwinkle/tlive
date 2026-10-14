@@ -172,7 +172,11 @@ export function startCompanion(deps: CompanionDeps): Companion {
       if (resumed.has(threadId)) return;
       resumed.add(threadId);
     }
-    rpc.call('thread/resume', { threadId }).then(
+    // excludeTurns: the response is read for `cwd` only, and without it the
+    // app-server hydrates the thread's whole history on every subscribe —
+    // deprecated since Codex 0.162. It does not skip the replay of pending
+    // approvals to this connection. Older servers ignore the unknown field.
+    rpc.call('thread/resume', { threadId, excludeTurns: true }).then(
       (res) => {
         const cwd = (res as { cwd?: unknown } | undefined)?.cwd;
         if (typeof cwd === 'string' && cwd) threadCwds.set(threadId, cwd);
@@ -643,11 +647,13 @@ export function resumeFailureText(errorMessage: string): string {
  *  can carry a reason:
  *   - `TurnComplete` with a recorded error → `status: "failed"`, `turn.error` set
  *     (bespoke_event_handling.rs:1478).
- *   - `TurnAborted` → `status: "interrupted"`, **`error: None` unconditionally**
+ *   - `TurnAborted` → `status: "interrupted"`, **`error: None` for an Esc**
  *     (:1497). Codex routes authentication failures down this path, which is why
  *     a dead API key looks exactly like the user pressing Esc if you read
  *     `status` alone — and why the rollout files say
- *     `turn_aborted reason: "interrupted"` for a 401.
+ *     `turn_aborted reason: "interrupted"` for a 401. Since 0.162 an extension
+ *     that aborts a turn can attach an error; Esc still attaches none, so an
+ *     interrupt that carries one is still not a human.
  *
  *  So an interrupt with a remembered error is a failure, and an interrupt
  *  without one is a human. `status` still wins whenever it says `failed` or
