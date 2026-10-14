@@ -1915,6 +1915,46 @@ describe('Codex resume handler → continue card (regression: sentinel mismatch)
 // No Allow/Deny buttons: that dialog can only be answered at the keyboard (CC
 // awaits the hook before building it, so the hook invocation is over by the time
 // the dialog exists). Buttons that cannot work are worse than none.
+// A headless run (`claude -p`, an Agent SDK host) has no terminal dialog, so a
+// held request is its only way out. `full` hands it straight back — Claude Code
+// denies, or the SDK host's own callback decides — and only `all` holds it.
+describe('headless sessions follow the posture ladder', () => {
+  const CFG = {
+    web: { enabled: false },
+    approvals: { approvalGraceSec: 0 },
+    adapters: { telegram: { token: 't', chatIdAllowList: ['c1'] } },
+  };
+  const headlessRequest = { kind: 'hook.permission.request', cwd: '/w', sessionId: 's1', headless: true, toolName: 'Bash', input: { command: 'make deploy' }, timeoutSec: 60 } as const;
+
+  it('full: handed straight back, and nobody is paged about it', async () => {
+    writeFileSync(join(tmp, 'config.json'), JSON.stringify({ ...CFG, mode: 'full' }));
+    const sent: OutgoingMessage[] = [];
+    h = await bootstrapDaemon({ home: tmp, imAdapters: [interactiveAdapter('telegram', sent)] });
+    const sock = daemonSocketPath(tmp);
+
+    const r = await request(headlessRequest, { socketPath: sock, timeoutMs: 2000 });
+    expect(r).toEqual({ kind: 'hook.permission.result', decision: 'defer' });
+    // Absence assertion: a fixed wait is the only way to show nothing arrives.
+    await new Promise((res) => setTimeout(res, 300));
+    expect(sent).toEqual([]);
+  });
+
+  it('all: held, with a card to answer it', async () => {
+    writeFileSync(join(tmp, 'config.json'), JSON.stringify({ ...CFG, mode: 'all' }));
+    const sent: OutgoingMessage[] = [];
+    h = await bootstrapDaemon({ home: tmp, imAdapters: [interactiveAdapter('telegram', sent)] });
+    const sock = daemonSocketPath(tmp);
+
+    const held = request(headlessRequest, { socketPath: sock, timeoutMs: 5000 }).catch(() => undefined);
+    await waitForSent(sent);
+    const msg = sent[0] as { title?: string; body?: string; buttons?: Array<{ id: string }> };
+    expect(`${msg.title ?? ''}\n${msg.body ?? ''}`).toContain('make deploy');
+    expect((msg.buttons ?? []).some((b) => b.id.startsWith('approve:'))).toBe(true);
+    await h.shutdown();
+    await held;
+  });
+});
+
 describe('sub-agent pass-through tells you what is blocked', () => {
   const CFG = {
     mode: 'full',

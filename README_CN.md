@@ -110,6 +110,10 @@ IM 消息带 `label · ` 前缀(会话目录名),但不再用图标区分包装/
     要不要建框之前先解析 hook,所以被 hold 的子代理在窗口结束前**没有**
     终端框——远程成了唯一答复路径。只有没人守着键盘时才划算,
     `tlive mode full` 可以切回去。
+  - **无头运行同样透传** —— `claude -p` 和 Agent SDK 程序根本没有终端框,
+    所以在 `full` 下 tlive 交给 Claude Code 原生处理:`-p` 下直接拒绝,
+    SDK 程序走它自己的权限回调。`tlive mode all` 会 hold 它们,被 hold 的
+    运行会等你作答或等到窗口结束。
 - **远程回答 `AskUserQuestion`(仅 Claude Code)** —— CC 为自己的提问工具
   fire `PermissionRequest`;tlive 把它转成单选或多选卡(复选框、实时
   `Submit (N)` 计数、`Skip`)而非 Allow/Deny,IM 和 dashboard 会话卡都能答。
