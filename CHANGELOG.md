@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.3.2](https://github.com/y49/tlive/compare/v5.3.1...v5.3.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* a newer finished turn supersedes the older one's grace ([#101](https://github.com/y49/tlive/issues/101)) ([62368dd](https://github.com/y49/tlive/commit/62368ddc3af0be740b5471d61bb351d8556790a0))
+* **codex:** subscribe to a thread without hydrating its history ([#103](https://github.com/y49/tlive/issues/103)) ([86ae5db](https://github.com/y49/tlive/commit/86ae5dbe307e05b875919a000e1de6f33da178be))
+* leave headless runs to Claude Code on the full rung ([#102](https://github.com/y49/tlive/issues/102)) ([bc34883](https://github.com/y49/tlive/commit/bc3488365bed37f5cf9cf0e69eb425633f47548d))
+* report completion after remote Claude continuation ([#98](https://github.com/y49/tlive/issues/98)) ([b699542](https://github.com/y49/tlive/commit/b699542241138ee50a6dae81d3f42a6ac0c3763a))
+
 ## [5.3.1](https://github.com/y49/tlive/compare/v5.3.0...v5.3.1) (2026-09-02)
 
 
