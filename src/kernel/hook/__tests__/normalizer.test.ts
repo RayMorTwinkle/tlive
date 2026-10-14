@@ -14,11 +14,9 @@ describe('hook normalizer', () => {
     const n = parseHookInput('notification', { cwd: '/r', session_id: 's', message: '需要权限' });
     expect(n).toEqual({ event: 'attention', cwd: '/r', sessionId: 's', message: '需要权限' });
   });
-  it('parses Stop with stop_hook_active (loop guard for async rewake)', () => {
-    const n = parseHookInput('stop', { cwd: '/r', session_id: 's', stop_hook_active: true });
-    expect(n).toMatchObject({ event: 'attention', stopHookActive: true });
-    const n2 = parseHookInput('stop', { cwd: '/r', session_id: 's' });
-    expect((n2 as { stopHookActive?: boolean }).stopHookActive).toBeUndefined();
+  it('parses a Stop that a Stop hook resumed exactly like any other Stop', () => {
+    const resumed = parseHookInput('stop', { cwd: '/r', session_id: 's', stop_hook_active: true });
+    expect(resumed).toEqual(parseHookInput('stop', { cwd: '/r', session_id: 's' }));
   });
   it('parses Stop with last_assistant_message into attention.lastMessage', () => {
     const n = parseHookInput('stop', { cwd: '/r', session_id: 's', last_assistant_message: 'all done' });

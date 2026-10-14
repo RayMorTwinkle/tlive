@@ -371,6 +371,29 @@ describe('daemon → /ws/events downstream broadcast', () => {
     expect(sent).toHaveLength(0); // no continue card was ever sent
   });
 
+  it('continue grace: a second Stop inside the first one\'s grace supersedes it — one card, with the NEWER message, and neither request hangs', async () => {
+    // Reachable since a turn resumed by a Stop hook reports its own completion:
+    // another plugin's blocking Stop hook continues the turn with no prompt in
+    // between, so the next Stop for the same key lands inside this grace. Both
+    // waits used to share one map slot — the first timer deleted the second's
+    // entry and announced the OLD message, and the second never resolved.
+    writeFileSync(join(tmp, 'config.json'), JSON.stringify({ web: { port: 0 }, approvals: { continueGraceSec: 1 }, adapters: { telegram: { token: 't', chatIdAllowList: ['c1'] } } }));
+    const sent: string[] = [];
+    const adapter = makeFakeAdapter('telegram');
+    adapter.send = async (out: OutgoingMessage) => { sent.push(out.kind === 'text' ? out.text : (out.body ?? '')); return { messageId: 'm1' }; };
+    h = await bootstrapDaemon({ home: tmp, imAdapters: [adapter] });
+    const first = request({ kind: 'hook.continue.request', cwd: '/g', sessionId: 's', context: 'ctx', lastMessage: 'first answer' }, { socketPath: sock, timeoutMs: 8000 });
+    // Sequencing gate, as in the test above: let the first Stop arm its grace.
+    await new Promise((r) => setTimeout(r, 300));
+    const second = request({ kind: 'hook.continue.request', cwd: '/g', sessionId: 's', context: 'ctx', lastMessage: 'second answer' }, { socketPath: sock, timeoutMs: 8000 });
+    expect(((await first) as { reply: string | null }).reply).toBeNull();
+    await until(() => { expect(h.sessions.get('s')?.continueId).toBeTruthy(); });
+    h.continueBroker.answer(h.sessions.get('s')!.continueId!, 'go');
+    expect(((await second) as { reply: string | null }).reply).toBe('go');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/second answer/);
+  });
+
   it('upstream mute action over /ws/events toggles per-session mute and re-broadcasts', async () => {
     writeFileSync(join(tmp, 'config.json'), JSON.stringify({ web: { port: 0 } }));
     h = await bootstrapDaemon({ home: tmp });

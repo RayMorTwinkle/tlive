@@ -1059,11 +1059,24 @@ export async function bootstrapDaemon(opts: BootstrapOpts): Promise<DaemonHandle
     timer.unref();
     pendingDeath.set(key, { text, message, timer, repeats });
   };
+  /** Wait out the "your turn" grace for one finished turn. A newer turn ending
+   *  for the same key supersedes this one: its announcement is stale, and the
+   *  slot belongs to the newer wait. Each timer clears only its own entry —
+   *  sharing the slot by key alone let the older timer delete the newer wait,
+   *  announce the older message, and leave the newer wait unresolved forever.
+   *  Reachable whenever a turn ends without a prompt in between, e.g. another
+   *  plugin's blocking Stop hook continuing it. */
   const gracePassed = async (key: string): Promise<boolean> => {
     const graceSec = cfg.approvals?.continueGraceSec ?? 15;
+    cancelContinueCard(key);
     const suppressed = await new Promise<boolean>((res) => {
-      continueGrace.set(key, () => res(true));
-      setTimeout(() => { if (continueGrace.delete(key)) res(false); }, graceSec * 1000).unref();
+      const cancel = (): void => res(true);
+      continueGrace.set(key, cancel);
+      setTimeout(() => {
+        if (continueGrace.get(key) !== cancel) return;
+        continueGrace.delete(key);
+        res(false);
+      }, graceSec * 1000).unref();
     });
     return !suppressed;
   };
@@ -1372,17 +1385,6 @@ export async function bootstrapDaemon(opts: BootstrapOpts): Promise<DaemonHandle
           // which says someone tried, not that it worked, and which sibling
           // sub-agent traffic can raise on its own.
           endDeathEpisode(key);
-          // Grace 门控:turn 刚结束,先等 graceSec —— 你要是在键盘前很快开始新
-          // 一轮(UserPromptSubmit),就取消,不发续跑卡(消除刷屏);静默才推卡。
-          // (async Stop hook 让 turn 立即结束,本 grace 不占用你的终端。)
-          const gracePassed = async (): Promise<boolean> => {
-            const graceSec = cfg.approvals?.continueGraceSec ?? 15;
-            const suppressed = await new Promise<boolean>((res) => {
-              continueGrace.set(key, () => res(true));
-              setTimeout(() => { if (continueGrace.delete(key)) res(false); }, graceSec * 1000).unref();
-            });
-            return !suppressed;
-          };
           /** "Your turn" on the desktop — the same event the IM card rides, so
            *  both surfaces learn it from one place with the same grace applied.
            *  Never waits for the continue broker: that await runs for the whole
@@ -1401,10 +1403,13 @@ export async function bootstrapDaemon(opts: BootstrapOpts): Promise<DaemonHandle
             // waiting on it.
             events.broadcast({ type: 'session-upsert', session: sessions.upsert({ key, cwd: req.cwd, status: 'idle', ...(req.lastMessage ? { lastMessage: req.lastMessage } : {}) }) });
             reply({ kind: 'hook.continue.result', reply: null });
-            void gracePassed().then((ok) => { if (ok) notifyTurn(); });
+            void gracePassed(key).then((ok) => { if (ok) notifyTurn(); });
             return;
           }
-          if (!(await gracePassed())) {
+          // Grace 门控:turn 刚结束,先等 graceSec —— 你要是在键盘前很快开始新
+          // 一轮(UserPromptSubmit),就取消,不发续跑卡(消除刷屏);静默才推卡。
+          // (async Stop hook 让 turn 立即结束,本 grace 不占用你的终端。)
+          if (!(await gracePassed(key))) {
             events.broadcast({ type: 'session-upsert', session: sessions.upsert({ key, cwd: req.cwd, status: 'active' }) });
             reply({ kind: 'hook.continue.result', reply: null });
             return;

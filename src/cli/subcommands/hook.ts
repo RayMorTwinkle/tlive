@@ -231,7 +231,7 @@ export async function runHook(argv: string[]): Promise<void> {
     if (event === 'stop') {
       // async Stop hook(插件配 async:true+asyncRewake:true):CC 不等本进程,turn
       // 立即结束(键盘前零卡);本进程在后台等 daemon 的续跑回复。
-      const att = n as { cwd: string; sessionId: string; message: string; lastMessage?: string; stopHookActive?: boolean };
+      const att = n as { cwd: string; sessionId: string; message: string; lastMessage?: string };
       // Hook-resumed turns must report completion and accept another remote reply.
       // Waiting does not create a loop: only an explicit reply below exits 2;
       // timeout or unavailable daemon exits 0 without waking the session.
