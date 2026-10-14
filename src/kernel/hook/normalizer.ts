@@ -25,7 +25,7 @@ export type NormalizedHook =
   // 关联回同一个 agent 的挂起审批,同 key 同 tool 的其他 agent 的卡不受影响。
   | { event: 'approval-request'; cwd: string; sessionId: string; toolName: string; input: unknown; permissionMode?: string; agentId?: string }
   | { event: 'activity'; cwd: string; sessionId: string; toolName: string; result: unknown; agentId?: string }
-  | { event: 'attention'; cwd: string; sessionId: string; message: string; lastMessage?: string; stopHookActive?: boolean; droppable?: boolean; localWaiting?: LocalWaiting; sessionError?: SessionError }
+  | { event: 'attention'; cwd: string; sessionId: string; message: string; lastMessage?: string; droppable?: boolean; localWaiting?: LocalWaiting; sessionError?: SessionError }
   | { event: 'prompt'; cwd: string; sessionId: string; prompt: string }
   | { event: 'subagent'; cwd: string; sessionId: string; delta: 1 | -1; agentType?: string }
   | { event: 'session-start'; cwd: string; sessionId: string; source?: string }
@@ -130,7 +130,6 @@ interface RawHook {
   error_details?: string;
   is_interrupt?: boolean;
   agent_type?: string;
-  stop_hook_active?: boolean;
   agent_id?: string;
 }
 
@@ -146,9 +145,10 @@ export function parseHookInput(event: HookEventName, raw: unknown): NormalizedHo
     case 'post-tool-use':
       return { event: 'activity', cwd, sessionId, toolName: r.tool_name ?? '(unknown)', result: r.tool_response ?? {}, ...(r.agent_id ? { agentId: r.agent_id } : {}) };
     case 'stop':
-      // Preserve whether a previous Stop hook resumed this turn. The shim still
-      // reports its completion; another wake requires a new explicit remote reply.
-      return { event: 'attention', cwd, sessionId, message: TURN_FINISHED_SENTINEL, ...(r.last_assistant_message ? { lastMessage: r.last_assistant_message } : {}), ...(r.stop_hook_active ? { stopHookActive: true } : {}) };
+      // `stop_hook_active` is deliberately not read: a turn that a Stop hook
+      // resumed finishes like any other and is reported like any other. Only a
+      // human reply wakes the session again, so there is no loop to guard.
+      return { event: 'attention', cwd, sessionId, message: TURN_FINISHED_SENTINEL, ...(r.last_assistant_message ? { lastMessage: r.last_assistant_message } : {}) };
     case 'notification':
       // permission_prompt ("Claude needs your permission to use X") is TAGGED,
       // not dropped: whether it duplicates a live approval card is the daemon's
