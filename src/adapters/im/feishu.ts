@@ -34,6 +34,29 @@ function buttonType(id: string): 'primary' | 'danger' | 'default' {
   return 'default';
 }
 
+/** 飞书送达一个 @ 时给的不是名字,而是占位符 token —— 正文里原样带着
+ *  `@_user_1`(@所有人是 `@_all`),`mentions[].key` 就是同一个字符串。于是群里
+ *  那条「@机器人 /help」到适配器时是 `"@_user_1 /help"`;命令层要求以 `/` 开头
+ *  (im-commands.ts),整条命令因此落进裸文本分支 —— 私聊能用、群里不能用的
+ *  差别就是这么来的:群消息必然带着对机器人的 @,私聊没有。
+ *
+ *  只剥**开头**的地址 token。句子中间的 @ 是用户的内容(有人 @ 同事一起看),
+ *  改写它等于替用户改句子;开头那个是「这话是说给谁听的」元数据,tlive 就是
+ *  那个收件人,不该把它带进命令解析,也不该原样打进被包装会话的 pty。
+ *
+ *  token 形状取自 im.message.receive_v1 的线上样例:content =
+ *  `{"text":"@_user_1 hello"}` 且 mentions[0].key = `@_user_1`。收尾用
+ *  `(?![A-Za-z0-9_])`,不赌"用户正文恰好以 @_user_1x 开头"这种边角。 */
+const MENTION_TOKEN = /^@_(?:user_\d+|all)(?![A-Za-z0-9_])/;
+
+export function stripLeadingMentions(text: string): string {
+  let rest = text.trimStart();
+  for (let m = MENTION_TOKEN.exec(rest); m; m = MENTION_TOKEN.exec(rest)) {
+    rest = rest.slice(m[0].length).trimStart();
+  }
+  return rest;
+}
+
 /** Build a Feishu interactive card — JSON schema 2.0 (client 7.20+, older
  *  clients degrade to an upgrade prompt; doc-verified 2026-07-21). 2.0 buys:
  *  native inline code / `> ` quote / fences in markdown (feishu-card.ts is
@@ -193,7 +216,9 @@ export class FeishuAdapter implements IMAdapter {
         let attachments: IncomingEnvelope['attachments'];
         try {
           const c = JSON.parse(ev.message.content) as { text?: string; image_key?: string; file_key?: string; file_name?: string };
-          text = c.text ?? '';
+          // 群消息正文以 @占位符 开头(见 stripLeadingMentions);不剥掉,群里
+          // 的命令永远解析不到,注入终端的文字也会带上这串 token。
+          text = stripLeadingMentions(c.text ?? '');
           const key = c.image_key ?? c.file_key;
           if (key) {
             const isImage = !!c.image_key;
