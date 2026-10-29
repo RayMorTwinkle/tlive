@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // capturedHandlers is populated by the EventDispatcher mock's register() call.
 const capturedHandlers: Record<string, (data: unknown) => Promise<unknown>> = {};
@@ -16,7 +16,7 @@ vi.mock('@larksuiteoapi/node-sdk', () => ({
   },
 }));
 
-import { FeishuAdapter } from '../feishu.js';
+import { FeishuAdapter, stripLeadingMentions } from '../feishu.js';
 
 describe('FeishuAdapter', () => {
   beforeEach(() => {
@@ -103,6 +103,74 @@ describe('FeishuAdapter', () => {
       await capturedHandlers['im.message.receive_v1'](makeMsg('chat-ok'));
       expect(inbound2).not.toHaveBeenCalled();
       await a2.stop();
+    });
+  });
+
+  // --- group @mention prefix ---
+  // Feishu puts a PLACEHOLDER in the text, not a name: a group message that
+  // @s the bot arrives as "@_user_1 /help" (im.message.receive_v1 wire sample).
+  // Unstripped, every group command misses `text.startsWith('/')` and falls
+  // into the bare-text branch — the DM works, the group silently doesn't.
+  describe('im.message.receive_v1 @mention prefix', () => {
+    let inbound: ReturnType<typeof vi.fn>;
+    let adapter: FeishuAdapter;
+
+    beforeEach(async () => {
+      adapter = new FeishuAdapter({ appId: 'A', appSecret: 'S', chatId: 'oc_group' });
+      await adapter.start();
+      inbound = vi.fn();
+      adapter.onInbound(inbound);
+    });
+
+    afterEach(async () => { await adapter.stop(); });
+
+    const groupMsg = (text: string) => ({
+      sender: { sender_id: { user_id: 'u1' } },
+      message: {
+        message_id: 'mid1',
+        chat_id: 'oc_group',
+        content: JSON.stringify({ text }),
+        create_time: '1700000000000',
+      },
+      mentions: [{ key: '@_user_1', name: 'tlive', id: { open_id: 'ou_bot' } }],
+    });
+
+    const textOf = (): string => (inbound.mock.calls[0][0] as { text: string }).text;
+
+    it('drops the leading mention so a group command arrives as typed', async () => {
+      await capturedHandlers['im.message.receive_v1'](groupMsg('@_user_1 /help'));
+      expect(textOf()).toBe('/help');
+    });
+
+    it('drops several leading mentions and the whitespace between them', async () => {
+      await capturedHandlers['im.message.receive_v1'](groupMsg('@_user_1  @_user_2   你好'));
+      expect(textOf()).toBe('你好');
+    });
+
+    it('keeps a mention that is part of the sentence', async () => {
+      await capturedHandlers['im.message.receive_v1'](groupMsg('@_user_1 让 @_user_2 也看看'));
+      expect(textOf()).toBe('让 @_user_2 也看看');
+    });
+
+    it('leaves a p2p message with no mention untouched', async () => {
+      await capturedHandlers['im.message.receive_v1'](groupMsg('hello'));
+      expect(textOf()).toBe('hello');
+    });
+
+    it('turns a bare mention into empty text instead of injecting the token', async () => {
+      await capturedHandlers['im.message.receive_v1'](groupMsg('@_user_1'));
+      expect(textOf()).toBe('');
+    });
+  });
+
+  describe('stripLeadingMentions', () => {
+    it('handles @_all and only at the start', () => {
+      expect(stripLeadingMentions('@_all 大家好')).toBe('大家好');
+      expect(stripLeadingMentions('大家好 @_all')).toBe('大家好 @_all');
+    });
+
+    it('does not eat text that merely looks similar', () => {
+      expect(stripLeadingMentions('@_user_1x is not a mention')).toBe('@_user_1x is not a mention');
     });
   });
 
